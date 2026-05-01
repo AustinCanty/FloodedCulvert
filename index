@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Salisbury Culvert · Tidal Hydraulic Model</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0f17;
+      --bg-2: #0e1622;
+      --panel: #121b28;
+      --panel-2: #172234;
+      --border: #1c2738;
+      --border-strong: #2a3a52;
+      --ink: #e9e4d3;
+      --ink-dim: #8a93a5;
+      --ink-faint: #555f72;
+      --copper: #c16c3a;
+      --copper-br: #e28b54;
+      --tidal: #4fb8cf;
+      --tidal-br: #7ddbee;
+      --tidal-dp: #1e5668;
+      --warn: #e8a23a;
+      --danger: #d85a4e;
+      --ok: #8dc97a;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;overflow:hidden}
+    body{
+      background:var(--bg);
+      background-image:
+        radial-gradient(ellipse at 15% 0%, #112334 0%, transparent 55%),
+        radial-gradient(ellipse at 90% 100%, #1a1a2e 0%, transparent 55%);
+      color:var(--ink);
+      font-family:'Archivo',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+    header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:16px 26px;border-bottom:1px solid var(--border);
+      background:linear-gradient(180deg,rgba(14,22,34,.6),rgba(14,22,34,0));
+      backdrop-filter:blur(10px);
+    }
+    .brand{display:flex;flex-direction:column;gap:2px}
+    .brand-title{
+      font-family:'Instrument Serif',serif;font-style:italic;
+      font-size:28px;letter-spacing:.005em;color:var(--ink);
+    }
+    .brand-subtitle{
+      font-family:'JetBrains Mono',monospace;font-size:10.5px;
+      letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);
+    }
+    .loc{display:flex;gap:22px;align-items:center}
+    .loc-item{display:flex;flex-direction:column;gap:2px;padding-left:16px;border-left:1px solid var(--border-strong)}
+    .loc-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--ink-faint);text-transform:uppercase}
+    .loc-value{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim)}
+    main{display:grid;grid-template-columns:1fr 420px;min-height:0}
+    #viewport{position:relative;overflow:hidden}
+    #three-canvas{width:100%;height:100%;display:block}
+    .vp-overlay{position:absolute;pointer-events:none;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:var(--ink-dim)}
+    .vp-compass{top:18px;left:22px}
+    .vp-compass strong{color:var(--ink);font-weight:500}
+    .vp-help{bottom:18px;left:22px;opacity:.65}
+    .vp-legend{
+      position:absolute;top:18px;right:22px;display:flex;flex-direction:column;gap:6px;
+      padding:10px 14px;background:rgba(14,22,34,.65);border:1px solid var(--border);
+      font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--ink-dim);
+      backdrop-filter:blur(6px);
+    }
+    .vp-legend .row{display:flex;align-items:center;gap:8px}
+    .sw{width:10px;height:10px;border-radius:1px}
+
+    aside#controls{
+      border-left:1px solid var(--border);background:var(--bg-2);
+      overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:16px;
+    }
+    .card{border:1px solid var(--border);background:var(--panel);border-radius:2px;padding:16px 18px}
+    .card.accent{background:linear-gradient(145deg,#152235,#0f1826);border-color:var(--border-strong)}
+    .card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+    .card-title{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)}
+    .card-tag{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-faint);letter-spacing:.15em}
+
+    .readout{display:flex;align-items:baseline;gap:6px;font-family:'Instrument Serif',serif}
+    .readout-value{font-size:58px;line-height:.9;color:var(--tidal-br);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+    .readout-unit{font-size:18px;color:var(--ink-dim);font-style:italic}
+    .readout-sub{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-dim);margin-top:8px;letter-spacing:.03em}
+
+    .regime{
+      display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:2px;
+      font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;
+      text-transform:uppercase;margin-top:12px;
+    }
+    .regime::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+    .regime.dry{background:rgba(232,162,58,.08);color:var(--warn);border:1px solid rgba(232,162,58,.25)}
+    .regime.flow{background:rgba(141,201,122,.08);color:var(--ok);border:1px solid rgba(141,201,122,.25)}
+    .regime.subm{background:rgba(79,184,207,.1);color:var(--tidal-br);border:1px solid rgba(79,184,207,.3)}
+    .regime.over{background:rgba(216,90,78,.1);color:var(--danger);border:1px solid rgba(216,90,78,.3)}
+    .regime-note{font-family:'Archivo',sans-serif;font-size:12.5px;color:var(--ink-dim);line-height:1.55;margin-top:10px}
+
+    .slider-wrap{margin-top:4px;position:relative}
+    .slider{-webkit-appearance:none;appearance:none;width:100%;height:2px;background:var(--border-strong);outline:none;margin:20px 0 4px}
+    .slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--tidal-br);border:2px solid var(--bg-2);cursor:pointer;box-shadow:0 0 0 1px var(--tidal),0 0 14px rgba(79,184,207,.55)}
+    .slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--tidal-br);border:2px solid var(--bg-2);cursor:pointer;box-shadow:0 0 0 1px var(--tidal)}
+    .slider-ticks{position:relative;height:24px;margin-top:-4px}
+    .tick{position:absolute;top:0;height:6px;width:1px;background:var(--border-strong)}
+    .tick-label{position:absolute;top:8px;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--ink-faint);white-space:nowrap;letter-spacing:.05em}
+
+    .player{display:flex;gap:8px;align-items:center;margin-top:12px}
+    .play-btn{
+      background:var(--tidal);color:#07121c;border:none;padding:10px 14px;
+      font-family:'Archivo',sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.14em;
+      text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:8px;
+      transition:background .15s;
+    }
+    .play-btn:hover{background:var(--tidal-br)}
+    .play-btn.playing{background:var(--warn)}
+    .play-speed{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-dim);margin-left:auto}
+
+    .presets{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:4px}
+    .preset{
+      background:transparent;border:1px solid var(--border-strong);color:var(--ink-dim);
+      padding:9px 11px;font-family:'Archivo',sans-serif;font-size:12px;font-weight:500;
+      text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+      transition:all .15s;
+    }
+    .preset:hover{border-color:var(--tidal);color:var(--ink);background:rgba(79,184,207,.05)}
+    .preset.active{border-color:var(--tidal);color:var(--tidal-br);background:rgba(79,184,207,.08)}
+    .preset-elev{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-faint)}
+    .preset:hover .preset-elev{color:var(--tidal-br)}
+
+    .view-toggle{display:flex;gap:4px;margin-top:4px}
+    .view-btn{
+      flex:1;background:transparent;border:1px solid var(--border-strong);color:var(--ink-dim);
+      padding:9px 10px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.18em;
+      cursor:pointer;transition:all .15s;text-transform:uppercase;
+    }
+    .view-btn:hover{border-color:var(--tidal);color:var(--ink)}
+    .view-btn.active{border-color:var(--tidal);color:var(--tidal-br);background:rgba(79,184,207,.08)}
+    .view-hint{font-family:'Archivo',sans-serif;font-size:11.5px;color:var(--ink-faint);margin-top:8px;line-height:1.45}
+
+    .profile-svg{width:100%;height:230px;display:block;margin-top:2px}
+    .profile-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-dim);letter-spacing:.03em}
+    .legend-item{display:flex;align-items:center;gap:6px}
+    .legend-swatch{width:12px;height:10px}
+
+    .elev-list{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;margin-top:2px}
+    .elev-list dt{color:var(--ink-dim)}
+    .elev-list dd{color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+    .elev-list .hl dt, .elev-list .hl dd{color:var(--tidal-br)}
+
+    .muted-note{font-family:'Archivo',sans-serif;font-size:11.5px;line-height:1.5;color:var(--ink-dim)}
+    .muted-note b{color:var(--ink);font-weight:500}
+
+    aside#controls::-webkit-scrollbar{width:6px}
+    aside#controls::-webkit-scrollbar-track{background:transparent}
+    aside#controls::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+
+    @media (max-width:980px){
+      main{grid-template-columns:1fr;grid-template-rows:54vh 46vh}
+      aside#controls{border-left:none;border-top:1px solid var(--border)}
+      .loc{display:none}
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-title">Salisbury Culvert — Tidal Hydraulic Model</div>
+      <div class="brand-subtitle">E. Reservation Rd · Ø 0.914 m CMP · BSC Group</div>
+    </div>
+    <div class="loc">
+      <div class="loc-item"><div class="loc-label">Lat / Lon</div><div class="loc-value">42°50′22″ N · 70°49′13″ W</div></div>
+      <div class="loc-item"><div class="loc-label">Datum</div><div class="loc-value">NAVD88 · EPSG:32619</div></div>
+      <div class="loc-item"><div class="loc-label">Model</div><div class="loc-value">TELEMAC-2D</div></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="viewport">
+      <canvas id="three-canvas"></canvas>
+      <div class="vp-overlay vp-compass"><strong>E ←→ W</strong> culvert axis &nbsp;·&nbsp; N-S road alignment</div>
+      <div class="vp-overlay vp-help">drag · orbit &nbsp; scroll · zoom &nbsp; right-drag · pan</div>
+      <div class="vp-legend">
+        <div class="row"><span class="sw" style="background:#1f2a3a;border:1px solid #c16c3a"></span>CMP culvert · 0.914 m</div>
+        <div class="row"><span class="sw" style="background:#4fb8cf;opacity:.85"></span>tidal water surface</div>
+        <div class="row"><span class="sw" style="background:#15120f"></span>road surface · +1.80 m</div>
+        <div class="row"><span class="sw" style="background:#9a8356"></span>marsh (phragmites / peat)</div>
+      </div>
+    </div>
+
+    <aside id="controls">
+      <div class="card accent">
+        <div class="card-head"><div class="card-title">West Water Surface</div><div class="card-tag">TIDAL SIDE</div></div>
+        <div class="readout">
+          <div class="readout-value" id="wl-value">−0.73</div>
+          <div class="readout-unit">m · NAVD88</div>
+        </div>
+        <div class="readout-sub" id="wl-sub">0.03 m below west invert</div>
+        <div class="regime" id="regime"><span id="regime-label">dry — no conveyance</span></div>
+        <div class="regime-note" id="regime-note">Water surface is below the west invert. The culvert is dry; the estuary and upstream marsh are hydrologically disconnected.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Tidal Control</div><div class="card-tag">−0.73 → 1.96 m</div></div>
+        <div class="slider-wrap">
+          <input type="range" class="slider" id="slider" min="-0.73" max="1.96" step="0.01" value="-0.73">
+          <div class="slider-ticks" id="ticks"></div>
+        </div>
+        <div class="player">
+          <button class="play-btn" id="play-btn">
+            <svg id="play-icon" width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12 Z"/></svg>
+            <span id="play-label">Run tidal cycle</span>
+          </button>
+          <div class="play-speed">period · 24 s</div>
+        </div>
+      </div>
+
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Longitudinal Profile</div><div class="card-tag">W &nbsp;←→&nbsp; E</div></div>
+        <svg class="profile-svg" id="profile" viewBox="0 0 420 230" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="profile-legend">
+          <div class="legend-item"><span class="legend-swatch" style="background:#4fb8cf;opacity:.75"></span>water</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#0f1622;border:1px solid #c16c3a"></span>CMP</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#2a2115;border:1px solid #6e5a3a"></span>embankment</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#3a2f20"></span>marsh bed</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Control Elevations</div><div class="card-tag">m · NAVD88</div></div>
+        <dl class="elev-list">
+          <dt>Max observed WL</dt><dd>+1.960</dd>
+          <dt>Road surface (crest)</dt><dd>+1.800</dd>
+          <dt>East crown (soffit)</dt><dd>+0.440</dd>
+          <dt>West crown (soffit)</dt><dd>+0.214</dd>
+          <dt>East invert (GPS)</dt><dd>−0.474</dd>
+          <dt>West invert (GPS)</dt><dd>−0.700</dd>
+          <dt>Min observed WL</dt><dd>−0.730</dd>
+        </dl>
+        <div class="muted-note" style="margin-top:10px">
+          Inverts <b>GPS-anchored</b>; LiDAR bed bias corrected via deepening-only gradient (linear slope west −0.55 m → east −0.60 m over 262 m channel, culvert reach).
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ============ CONFIG ============ */
+const CFG = {
+  pipe:  { D:0.914, R:0.457, westInv:-0.70, eastInv:-0.474, westX:-6, eastX:6 },
+  water: { min:-0.73, max:1.96 },
+  road:  { y:1.8, halfWidthX:4, halfLengthZ:8, thickness:0.22 },
+  ground:{ marshY:0.55 },
+  scene: { halfX:28, halfZ:26 },
+};
+const P = CFG.pipe;
+const westCrown = P.westInv + P.D;           // 0.214
+const eastCrown = P.eastInv + P.D;           // 0.440
+const pipeLen   = P.eastX - P.westX;
+const centerW_Y = P.westInv + P.R;
+const centerE_Y = P.eastInv + P.R;
+const pipeMidX  = (P.westX + P.eastX)/2;
+const pipeMidY  = (centerW_Y + centerE_Y)/2;
+
+/* ============ STATE ============ */
+let waterLevel = CFG.water.min;
+let isPlaying = false;
+let tStart = 0;
+const PERIOD_MS = 24000;
+
+/* ============ THREE.JS ============ */
+const canvas   = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a0f17, 28, 72);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+camera.position.set(-13, 6.5, 14);
+
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 6;
+controls.maxDistance = 48;
+controls.maxPolarAngle = Math.PI * 0.485;
+controls.target.set(0, 0.2, 0);
+
+/* ---- Lights ---- */
+scene.add(new THREE.AmbientLight(0x98aac0, 0.55));
+scene.add(new THREE.HemisphereLight(0xaec8dd, 0x2a1f18, 0.45));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.05);
+sun.position.set(14, 22, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const s=22;
+sun.shadow.camera.left=-s; sun.shadow.camera.right=s; sun.shadow.camera.top=s; sun.shadow.camera.bottom=-s;
+sun.shadow.camera.near=1; sun.shadow.camera.far=60; sun.shadow.bias=-0.0005;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x7a9fd0, 0.28);
+fill.position.set(-10, 8, -6);
+scene.add(fill);
+
+/* ---- Ground (marsh with channel cut) ---- */
+const groundGeom = new THREE.PlaneGeometry(CFG.scene.halfX*2, CFG.scene.halfZ*2, 110, 96);
+const gpos = groundGeom.attributes.position;
+/* Per-vertex colors for marsh / mud / peat variation */
+const gColors = new Float32Array(gpos.count * 3);
+const cReed = new THREE.Color(0x9a8356);  // dried reed/phragmites — golden-tan
+const cOliv = new THREE.Color(0x7a6a3e);  // olive marsh vegetation
+const cPeat = new THREE.Color(0x2e2418);  // wet peat / exposed mud bank
+const cSilt = new THREE.Color(0x4a3d28);  // damp silt between reeds
+const tmpCol = new THREE.Color();
+function smoothNoise(x, z){
+  /* cheap multi-octave pseudo-noise */
+  return 0.5 + 0.35*Math.sin(x*0.41 + z*0.27)
+             + 0.22*Math.cos(x*0.18 - z*0.33)
+             + 0.18*Math.sin(x*0.71 + z*0.12)
+             + 0.12*Math.cos(x*1.13 - z*0.94);
+}
+for (let i=0; i<gpos.count; i++){
+  const x = gpos.getX(i);
+  const y = gpos.getY(i); // planar y → world -z after rotation
+  const dx=x, dz=y;
+  let h = CFG.ground.marshY;
+  h += Math.sin(dx*0.28)*0.07 + Math.cos(dz*0.22)*0.06 + Math.sin(dx*0.14 + dz*0.18)*0.05;
+  const inChannelX = dx > -14 && dx < 14;
+  const nearAxisZ = Math.abs(dz);
+  let isChannel = false;
+  if (inChannelX){
+    let bedAtX;
+    if (dx >= P.westX && dx <= P.eastX){
+      bedAtX = P.westInv + (P.eastInv - P.westInv) * (dx - P.westX)/pipeLen;
+    } else if (dx < P.westX){
+      const t = Math.min(1, (P.westX - dx)/4);
+      bedAtX = P.westInv * (1-t) + (CFG.ground.marshY - 0.1) * t;
+    } else {
+      const t = Math.min(1, (dx - P.eastX)/4);
+      bedAtX = P.eastInv * (1-t) + (CFG.ground.marshY - 0.1) * t;
+    }
+    const chHalf = 1.7;
+    if (nearAxisZ < chHalf){
+      const k = Math.cos(nearAxisZ/chHalf * Math.PI/2);
+      h = h - (h - bedAtX) * k;
+      if (k > 0.35) isChannel = true;
+    }
+  }
+  const far = Math.max(0, nearAxisZ - 6);
+  h += far*0.07;
+  gpos.setZ(i, h);
+  /* ---- color ---- */
+  const n = smoothNoise(dx, dz);
+  if (isChannel){
+    /* Channel bed — dark muddy peat */
+    tmpCol.copy(cPeat).lerp(cSilt, Math.max(0, Math.min(1, (n-0.3)*1.2)));
+  } else {
+    /* Marsh surface — reed/olive/peat mix driven by noise */
+    const t1 = Math.max(0, Math.min(1, (n - 0.35) * 1.1));   // reed vs olive
+    tmpCol.copy(cOliv).lerp(cReed, t1);
+    const n2 = smoothNoise(dx*0.6 + 17, dz*0.6 - 5);
+    const patch = Math.max(0, (n2 - 0.85)) * 3.5;            // occasional peat patches
+    tmpCol.lerp(cPeat, Math.min(0.7, patch));
+    /* Shoreline darkening near channel */
+    if (inChannelX && nearAxisZ < 3.2){
+      const edge = Math.max(0, 1 - (nearAxisZ - 1.7)/1.5);
+      tmpCol.lerp(cPeat, edge * 0.45);
+    }
+  }
+  gColors[i*3  ] = tmpCol.r;
+  gColors[i*3+1] = tmpCol.g;
+  gColors[i*3+2] = tmpCol.b;
+}
+gpos.needsUpdate = true;
+groundGeom.setAttribute('color', new THREE.BufferAttribute(gColors, 3));
+groundGeom.computeVertexNormals();
+const groundMat = new THREE.MeshStandardMaterial({
+  vertexColors:true, roughness:0.97, metalness:0.0
+});
+const ground = new THREE.Mesh(groundGeom, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ---- Embankment (rectangular block with vertical walls — matches DEM cross-section) ---- */
+const embHalfWidthX  = 4.6;   // slightly wider than road for a small fill lip
+const embHalfLengthZ = CFG.road.halfLengthZ;
+const embH = CFG.road.y;
+const embBaseY = -1.2;  // extend below the channel cut so there's no visible gap beneath the fill
+const embFullH = embH - embBaseY;
+const baseHW = embHalfWidthX;  // retained for references below
+const embGeom = new THREE.BoxGeometry(embHalfWidthX*2, embFullH, embHalfLengthZ*2);
+const embMat = new THREE.MeshStandardMaterial({
+  color:0x39301f, roughness:0.97, metalness:0,
+  transparent:true, opacity:0.22, depthWrite:false, side:THREE.DoubleSide
+});
+const emb = new THREE.Mesh(embGeom, embMat);
+emb.position.set(0, (embH + embBaseY)/2, 0);
+emb.renderOrder = 3;
+scene.add(emb);
+/* Embankment wire edges preserve silhouette when translucent */
+const embEdgeGeom = new THREE.EdgesGeometry(embGeom, 20);
+const embEdgeMat  = new THREE.LineBasicMaterial({color:0x8d6e44, transparent:true, opacity:0.65});
+const embEdges = new THREE.LineSegments(embEdgeGeom, embEdgeMat);
+embEdges.position.copy(emb.position);
+embEdges.renderOrder = 4;
+scene.add(embEdges);
+
+/* ---- Road surface ---- */
+const road = new THREE.Mesh(
+  new THREE.BoxGeometry(CFG.road.halfWidthX*2, CFG.road.thickness, CFG.road.halfLengthZ*2),
+  new THREE.MeshStandardMaterial({
+    color:0x15120f, roughness:0.88, metalness:0,
+    transparent:true, opacity:0.55, depthWrite:false
+  })
+);
+road.position.y = CFG.road.y - CFG.road.thickness/2;  // TOP of road at crest elevation 1.80
+road.renderOrder = 3;
+scene.add(road);
+
+/* ---- Road edge lines (sit just above the driving surface at 1.80) ---- */
+const edgeMat = new THREE.MeshBasicMaterial({color:0xeadf9a});
+for (const x of [-CFG.road.halfWidthX + 0.15, CFG.road.halfWidthX - 0.15]){
+  const e = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.01, CFG.road.halfLengthZ*2), edgeMat);
+  e.position.set(x, CFG.road.y + 0.006, 0);
+  scene.add(e);
+}
+/* dashed centerline */
+for (let dz=-CFG.road.halfLengthZ+0.8; dz<CFG.road.halfLengthZ; dz+=2.0){
+  const d = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.01, 1.0), new THREE.MeshBasicMaterial({color:0xeadf9a}));
+  d.position.set(0, CFG.road.y + 0.006, dz);
+  scene.add(d);
+}
+
+/* ---- Culvert (corrugated CMP, tilted) ---- */
+const pipeSeg = 56, pipeAx = 200;
+const pipeGeom = new THREE.CylinderGeometry(P.R, P.R, pipeLen, pipeSeg, pipeAx, true);
+const pp = pipeGeom.attributes.position;
+for (let i=0; i<pp.count; i++){
+  const x=pp.getX(i), y=pp.getY(i), z=pp.getZ(i);
+  const r = Math.sqrt(x*x + z*z);
+  if (r < 0.0001) continue;
+  const bump = 0.022 * Math.cos(y * (2*Math.PI/0.25));
+  const nr = r + bump;
+  pp.setX(i, x/r * nr);
+  pp.setZ(i, z/r * nr);
+}
+pipeGeom.computeVertexNormals();
+const pipeMat = new THREE.MeshStandardMaterial({
+  color:0x2a221d, roughness:0.72, metalness:0.55, side:THREE.DoubleSide
+});
+const pipe = new THREE.Mesh(pipeGeom, pipeMat);
+/* orient via quaternion */
+const axisDir = new THREE.Vector3(pipeLen, centerE_Y - centerW_Y, 0).normalize();
+const defaultAxis = new THREE.Vector3(0, 1, 0);
+const pipeQuat = new THREE.Quaternion().setFromUnitVectors(defaultAxis, axisDir);
+pipe.quaternion.copy(pipeQuat);
+pipe.position.set(pipeMidX, pipeMidY, 0);
+pipe.castShadow = true;
+pipe.receiveShadow = true;
+scene.add(pipe);
+
+/* ---- End rims (darker rings at the pipe openings) ---- */
+for (const [xe, inv] of [[P.westX, P.westInv], [P.eastX, P.eastInv]]){
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(P.R + 0.028, 0.028, 14, 52),
+    new THREE.MeshStandardMaterial({color:0x17120f, roughness:0.7, metalness:0.4})
+  );
+  ring.rotation.y = Math.PI/2;
+  ring.position.set(xe, inv + P.R, 0);
+  scene.add(ring);
+}
+
+/* ---- Water INSIDE pipe (clipped solid cylinder) ---- */
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), waterLevel);
+const innerWaterGeom = new THREE.CylinderGeometry(P.R - 0.012, P.R - 0.012, pipeLen + 0.1, pipeSeg, 1, false);
+const innerWaterMat = new THREE.MeshStandardMaterial({
+  color:0x3a9dbb, roughness:0.22, metalness:0.15,
+  transparent:true, opacity:0.85,
+  clippingPlanes:[clipPlane],
+  side:THREE.DoubleSide,
+});
+const innerWater = new THREE.Mesh(innerWaterGeom, innerWaterMat);
+innerWater.quaternion.copy(pipeQuat);
+innerWater.position.set(pipeMidX, pipeMidY, 0);
+scene.add(innerWater);
+
+/* ---- Water OUTSIDE pipe (west and east of embankment) ---- */
+function makeOuterWater(xMin, xMax){
+  const w = xMax - xMin, d = CFG.scene.halfZ*2;
+  const geom = new THREE.PlaneGeometry(w, d, 32, 32);
+  const mat = new THREE.MeshStandardMaterial({
+    color:0x2e6e83, roughness:0.2, metalness:0.1,
+    transparent:true, opacity:0.82, side:THREE.DoubleSide
+  });
+  const m = new THREE.Mesh(geom, mat);
+  m.rotation.x = -Math.PI/2;
+  m.position.set((xMin+xMax)/2, waterLevel, 0);
+  m.renderOrder = 1;
+  return m;
+}
+const westWater = makeOuterWater(-CFG.scene.halfX, -baseHW + 0.02);
+const eastWater = makeOuterWater( baseHW - 0.02,  CFG.scene.halfX);
+scene.add(westWater); scene.add(eastWater);
+
+/* ---- Overtopping water (covers the road + embankment when WL > road crest) ---- */
+const overtopGeom = new THREE.PlaneGeometry(baseHW*2 + 0.6, CFG.scene.halfZ*2, 28, 36);
+const overtopMat  = new THREE.MeshStandardMaterial({
+  color:0x3a8fa4, roughness:0.15, metalness:0.1,
+  transparent:true, opacity:0.82, side:THREE.DoubleSide
+});
+const overtopWater = new THREE.Mesh(overtopGeom, overtopMat);
+overtopWater.rotation.x = -Math.PI/2;
+overtopWater.position.set(0, waterLevel, 0);
+overtopWater.renderOrder = 6;  // draw AFTER road (road is 3) so sheet is visible over pavement
+overtopWater.visible = false;
+scene.add(overtopWater);
+
+/* ---- Crest overspill highlight: a bright foam strip along the road crest edges during overtopping ---- */
+const foamMat = new THREE.MeshBasicMaterial({color:0xd4eef4, transparent:true, opacity:0.85});
+const foamGeom = new THREE.BoxGeometry(baseHW*2, 0.04, 0.25);
+const foamNorth = new THREE.Mesh(foamGeom, foamMat);
+const foamSouth = new THREE.Mesh(foamGeom, foamMat);
+foamNorth.position.set(0, CFG.road.y + 0.03,  embHalfLengthZ - 0.02);
+foamSouth.position.set(0, CFG.road.y + 0.03, -embHalfLengthZ + 0.02);
+foamNorth.visible = foamSouth.visible = false;
+scene.add(foamNorth); scene.add(foamSouth);
+
+/* subtle wave offset for water surface */
+function jiggleWater(t){
+  for (const m of [westWater, eastWater]){
+    const pa = m.geometry.attributes.position;
+    for (let i=0; i<pa.count; i++){
+      const px = pa.getX(i), py = pa.getY(i);
+      const z = Math.sin(px*0.5 + t*0.9)*0.015 + Math.cos(py*0.45 + t*0.7)*0.012;
+      pa.setZ(i, z);
+    }
+    pa.needsUpdate = true;
+  }
+}
+
+/* ---- Elevation tag markers in 3D (sprites) ---- */
+function makeLabelSprite(text, color='#e9e4d3'){
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(14,22,34,0.85)';
+  ctx.fillRect(0,0,256,64);
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.strokeRect(1,1,254,62);
+  ctx.font = '600 22px "JetBrains Mono", monospace';
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(2.6, 0.65, 1);
+  return sp;
+}
+const lblW = makeLabelSprite('INV W −0.70', '#e28b54'); lblW.position.set(P.westX - 1.6, P.westInv + 0.55, 2.8); scene.add(lblW);
+const lblE = makeLabelSprite('INV E −0.47', '#e28b54'); lblE.position.set(P.eastX + 1.6, P.eastInv + 0.55, 2.8); scene.add(lblE);
+const lblR = makeLabelSprite('ROAD +1.80', '#e9e4d3'); lblR.position.set(0, CFG.road.y + 0.9, CFG.road.halfLengthZ - 1.5); scene.add(lblR);
+
+/* ============ UPDATE ============ */
+function updateWater(wl){
+  waterLevel = wl;
+  clipPlane.constant = wl;
+  westWater.position.y = wl;
+  eastWater.position.y = wl;
+  innerWater.visible = wl > P.westInv - 0.005;
+  /* hide outside water when extremely low (below ground channel) — keep visible for demonstration */
+  westWater.visible = true;
+  eastWater.visible = true;
+  /* Overtopping: water sheet above the road, plus foam edges at the crest */
+  const overtopped = wl > CFG.road.y;
+  overtopWater.visible = overtopped;
+  if (overtopped) overtopWater.position.y = wl;
+  foamNorth.visible = foamSouth.visible = overtopped;
+  renderUI();
+  renderProfile();
+  updateActivePreset();
+}
+
+/* ============ UI ============ */
+const $wlValue = document.getElementById('wl-value');
+const $wlSub   = document.getElementById('wl-sub');
+const $regime  = document.getElementById('regime');
+const $regimeLabel = document.getElementById('regime-label');
+const $regimeNote  = document.getElementById('regime-note');
+const $slider  = document.getElementById('slider');
+const $playBtn = document.getElementById('play-btn');
+const $playLabel = document.getElementById('play-label');
+const $playIcon = document.getElementById('play-icon');
+const $profile = document.getElementById('profile');
+const $presets = document.getElementById('presets');
+const $ticks   = document.getElementById('ticks');
+
+function fmt(x, d=2){
+  const sign = x<0 ? '−' : (x>0 ? '+' : ' ');
+  return sign + Math.abs(x).toFixed(d);
+}
+function classifyRegime(wl){
+  if (wl < P.westInv)    return {k:'dry',  l:'dry — no conveyance',        n:'Water surface is below the west invert. The culvert is dry; the estuary and upstream marsh are hydrologically disconnected.'};
+  if (wl < P.eastInv)    return {k:'dry',  l:'one-sided pooling',          n:'West invert is submerged but the east invert sits above the water surface. Water pools in the lower (west) portion of the pipe only — no through-flow.'};
+  if (wl < westCrown)    return {k:'flow', l:'open-channel flow',          n:'Both inverts are submerged. Culvert conveys tidal flow under open-channel (free-surface) conditions. Capacity scales with depth.'};
+  if (wl < eastCrown)    return {k:'subm', l:'west inlet submerged',       n:'West crown is drowned. Flow at the west side is pressurized while the east remains free-surface — transitioning to inlet-controlled flow.'};
+  if (wl < CFG.road.y)   return {k:'subm', l:'submerged orifice flow',     n:'Both crowns drowned. The culvert now acts as a submerged orifice — a significant tidal bottleneck that damps the upstream signal and limits drainage.'};
+                         return {k:'over', l:'road overtopped',            n:'Water surface is above the road crest (+1.80 m). Overland flow passes across the embankment in addition to the orifice flow through the culvert. Flood hazard to the roadway.'};
+}
+function renderUI(){
+  const wl = waterLevel;
+  $wlValue.textContent = fmt(wl, 2);
+  let sub;
+  if (wl < P.westInv){
+    sub = `${(P.westInv - wl).toFixed(2)} m below west invert`;
+  } else if (wl < P.eastInv){
+    sub = `${(wl - P.westInv).toFixed(2)} m above W invert · ${(P.eastInv - wl).toFixed(2)} m below E invert`;
+  } else if (wl < westCrown){
+    const d = wl - P.westInv;
+    sub = `flow depth at W = ${d.toFixed(2)} m · ${(d/P.D*100).toFixed(0)}% full`;
+  } else if (wl < eastCrown){
+    sub = `W pressurised · E ${(eastCrown - wl).toFixed(2)} m from crown`;
+  } else {
+    sub = `${(wl - eastCrown).toFixed(2)} m head above east crown`;
+  }
+  $wlSub.textContent = sub;
+  const r = classifyRegime(wl);
+  $regime.className = 'regime ' + r.k;
+  $regimeLabel.textContent = r.l;
+  $regimeNote.textContent = r.n;
+}
+
+/* ---- Presets ---- */
+const PRESETS = [
+  { label:'Low tide',      value:-0.73 },
+  { label:'West invert',   value:-0.70 },
+  { label:'East invert',   value:-0.474 },
+  { label:'Mid pipe (W)',  value:-0.243 },
+  { label:'West crown',    value: 0.214 },
+  { label:'East crown',    value: 0.440 },
+  { label:'Mean high',     value: 1.20 },
+  { label:'Road crest',    value: 1.80 },
+  { label:'Max tide',      value: 1.96 },
+];
+let activePresetIdx = -1;
+PRESETS.forEach((p, idx) => {
+  const b = document.createElement('button');
+  b.className = 'preset';
+  b.dataset.idx = idx;
+  b.innerHTML = `<span>${p.label}</span><span class="preset-elev">${fmt(p.value)}</span>`;
+  b.addEventListener('click', () => {
+    stopPlay();
+    setWater(p.value);
+    activePresetIdx = idx;
+    updateActivePreset();
+  });
+  $presets.appendChild(b);
+});
+function updateActivePreset(){
+  [...$presets.children].forEach((btn, i) => {
+    btn.classList.toggle('active', Math.abs(parseFloat(btn.lastChild.textContent.replace('−','-')) - waterLevel) < 0.005);
+  });
+}
+
+/* ---- Slider ticks ---- */
+const TICKS = [
+  {v:-0.70, t:'INV W'},
+  {v:-0.474, t:'INV E'},
+  {v: 0.214, t:'CRN W'},
+  {v: 0.440, t:'CRN E'},
+  {v: 1.80,  t:'ROAD'},
+  {v: 1.96,  t:'MAX'},
+];
+TICKS.forEach(({v,t}) => {
+  const pct = (v - CFG.water.min)/(CFG.water.max - CFG.water.min) * 100;
+  const tk = document.createElement('div'); tk.className='tick'; tk.style.left = pct + '%';
+  const lb = document.createElement('div'); lb.className='tick-label'; lb.style.left = pct + '%'; lb.textContent = t;
+  $ticks.appendChild(tk); $ticks.appendChild(lb);
+});
+
+/* ---- Slider interaction ---- */
+function setWater(v){ $slider.value = v; updateWater(parseFloat(v)); }
+$slider.addEventListener('input', (e) => { stopPlay(); updateWater(parseFloat(e.target.value)); });
+
+/* ---- Play button ---- */
+function startPlay(){
+  isPlaying = true;
+  $playBtn.classList.add('playing');
+  $playLabel.textContent = 'Pause';
+  $playIcon.innerHTML = '<rect x="1" y="0" width="3" height="12"/><rect x="6" y="0" width="3" height="12"/>';
+  tStart = performance.now();
+}
+function stopPlay(){
+  if (!isPlaying) return;
+  isPlaying = false;
+  $playBtn.classList.remove('playing');
+  $playLabel.textContent = 'Run tidal cycle';
+  $playIcon.innerHTML = '<path d="M0 0 L10 6 L0 12 Z"/>';
+}
+$playBtn.addEventListener('click', () => { isPlaying ? stopPlay() : startPlay(); });
+
+/* ============ X-RAY / SOLID TOGGLE ============ */
+const $xrayBtn  = document.getElementById('view-xray');
+const $solidBtn = document.getElementById('view-solid');
+function setXray(on){
+  if (on){
+    embMat.opacity = 0.22;
+    embMat.depthWrite = false;
+    road.material.opacity = 0.55;
+    road.material.depthWrite = false;
+    embEdges.visible = true;
+  } else {
+    embMat.opacity = 1.0;
+    embMat.depthWrite = true;
+    road.material.opacity = 1.0;
+    road.material.depthWrite = true;
+    embEdges.visible = false;
+  }
+  embMat.needsUpdate = true;
+  road.material.needsUpdate = true;
+  $xrayBtn.classList.toggle('active', on);
+  $solidBtn.classList.toggle('active', !on);
+}
+$xrayBtn.addEventListener('click',  () => setXray(true));
+$solidBtn.addEventListener('click', () => setXray(false));
+
+/* ============ PROFILE SVG ============ */
+const NS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, text){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function mapX(x){ return 30 + (x - (-10)) / 20 * 360; }
+function mapY(y){ return 15 + (3.0 - y) / 4.3 * 200; }
+function groundAtX(x){
+  if (x >= P.westX && x <= P.eastX){
+    return P.westInv + (P.eastInv - P.westInv) * (x - P.westX)/pipeLen;
+  } else if (x > P.westX - 2 && x < P.westX){
+    const t = (P.westX - x)/2;
+    return P.westInv * (1-t) + CFG.ground.marshY * t;
+  } else if (x > P.eastX && x < P.eastX + 2){
+    const t = (x - P.eastX)/2;
+    return P.eastInv * (1-t) + CFG.ground.marshY * t;
+  }
+  return CFG.ground.marshY;
+}
+function renderProfile(){
+  while ($profile.firstChild) $profile.removeChild($profile.firstChild);
+
+  /* grid + elev labels */
+  for (let el=-1; el<=3; el++){
+    const y = mapY(el);
+    $profile.appendChild(svg('line', {x1:30, x2:395, y1:y, y2:y, stroke:'#1c2738', 'stroke-width':0.5, 'stroke-dasharray': el===0 ? '' : '2 3'}));
+    $profile.appendChild(svg('text', {x:26, y:y+3, fill:'#555f72', 'font-size':9, 'font-family':'JetBrains Mono', 'text-anchor':'end'}, el.toFixed(0)));
+  }
+  /* axis: W/E markers */
+  $profile.appendChild(svg('text', {x:32, y:22, fill:'#8a93a5', 'font-size':9, 'font-family':'JetBrains Mono', 'letter-spacing':'.12em'}, 'W ←'));
+  $profile.appendChild(svg('text', {x:393, y:22, fill:'#8a93a5', 'font-size':9, 'font-family':'JetBrains Mono', 'text-anchor':'end', 'letter-spacing':'.12em'}, '→ E'));
+
+  /* ground fill */
+  const gp = [`M ${mapX(-10)} ${mapY(-1.3)}`];
+  for (let x=-10; x<=10.01; x+=0.2) gp.push(`L ${mapX(x)} ${mapY(groundAtX(x))}`);
+  gp.push(`L ${mapX(10)} ${mapY(-1.3)} Z`);
+  $profile.appendChild(svg('path', {d:gp.join(' '), fill:'#3a2f20'}));
+
+  /* water rectangle */
+  const wl = waterLevel;
+  if (wl > -1.3){
+    $profile.appendChild(svg('rect', {x:30, y:mapY(wl), width:365, height:mapY(-1.3)-mapY(wl), fill:'#2d6a7e', opacity:0.55}));
+    $profile.appendChild(svg('line', {x1:30, x2:395, y1:mapY(wl), y2:mapY(wl), stroke:'#7ddbee','stroke-width':1.2,'stroke-dasharray':'4 3',opacity:0.9}));
+  }
+
+  /* embankment with pipe hole — rectangular (vertical walls) matching DEM cross-section */
+  const embHW = 4.6;
+  const embOuter = `M ${mapX(-embHW)} ${mapY(-1.3)} L ${mapX(-embHW)} ${mapY(CFG.road.y)} L ${mapX(embHW)} ${mapY(CFG.road.y)} L ${mapX(embHW)} ${mapY(-1.3)} Z`;
+  const pipeHole = `M ${mapX(P.westX)} ${mapY(P.westInv)} L ${mapX(P.westX)} ${mapY(westCrown)} L ${mapX(P.eastX)} ${mapY(eastCrown)} L ${mapX(P.eastX)} ${mapY(P.eastInv)} Z`;
+  $profile.appendChild(svg('path', {d:embOuter + ' ' + pipeHole, 'fill-rule':'evenodd', fill:'#2a2115', stroke:'#6e5a3a','stroke-width':0.7}));
+
+  /* road top line */
+  $profile.appendChild(svg('line', {x1:mapX(-embHW), x2:mapX(embHW), y1:mapY(CFG.road.y), y2:mapY(CFG.road.y), stroke:'#c5c5c5','stroke-width':2.5}));
+  $profile.appendChild(svg('text', {x:mapX(0), y:mapY(CFG.road.y)-6, fill:'#c5c5c5', 'font-size':9,'font-family':'JetBrains Mono','text-anchor':'middle','letter-spacing':'.15em'}, 'ROAD +1.80'));
+
+  /* water inside pipe */
+  if (wl > P.westInv){
+    const pts = [];
+    pts.push([P.westX, P.westInv]);
+    if (wl >= P.eastInv){
+      pts.push([P.eastX, P.eastInv]);
+    } else {
+      const xI = P.westX + (wl - P.westInv) * pipeLen/(P.eastInv - P.westInv);
+      pts.push([xI, wl]);
+    }
+    const cx = pts[pts.length-1][0];
+    if (wl <= westCrown){
+      pts.push([cx, wl]);
+      pts.push([P.westX, wl]);
+    } else if (wl >= eastCrown){
+      pts.push([P.eastX, eastCrown]);
+      pts.push([P.westX, westCrown]);
+    } else {
+      const xC = P.westX + (wl - westCrown) * pipeLen/(eastCrown - westCrown);
+      if (cx > xC){
+        pts.push([cx, wl]);
+        pts.push([xC, wl]);
+        pts.push([P.westX, westCrown]);
+      } else {
+        const crAtCx = westCrown + (eastCrown - westCrown)*(cx - P.westX)/pipeLen;
+        pts.push([cx, crAtCx]);
+        pts.push([P.westX, westCrown]);
+      }
+    }
+    const d = 'M ' + pts.map(([x,y]) => `${mapX(x)} ${mapY(y)}`).join(' L ') + ' Z';
+    $profile.appendChild(svg('path', {d, fill:'#4fb8cf', opacity:0.78}));
+  }
+
+  /* pipe outline */
+  $profile.appendChild(svg('path', {d:pipeHole, fill:'none', stroke:'#c16c3a','stroke-width':1.7}));
+
+  /* invert labels */
+  $profile.appendChild(svg('text', {x:mapX(P.westX)-4, y:mapY(P.westInv)+12, fill:'#e28b54','font-size':9,'font-family':'JetBrains Mono','text-anchor':'end'}, 'INV −0.70'));
+  $profile.appendChild(svg('text', {x:mapX(P.eastX)+4, y:mapY(P.eastInv)+12, fill:'#e28b54','font-size':9,'font-family':'JetBrains Mono','text-anchor':'start'}, 'INV −0.47'));
+
+  /* water-level badge */
+  if (wl > -1.3 && wl < 3){
+    const y = mapY(wl);
+    $profile.appendChild(svg('rect', {x:345, y:y-8, width:50, height:14, fill:'#4fb8cf', opacity:0.92}));
+    $profile.appendChild(svg('text', {x:370, y:y+2, fill:'#07121c','font-size':9,'font-family':'JetBrains Mono','text-anchor':'middle','font-weight':'600'}, `WL ${fmt(wl,2)}`));
+  }
+}
+
+/* ============ ANIMATION ============ */
+function animate(now){
+  requestAnimationFrame(animate);
+  if (isPlaying){
+    const dt = now - tStart;
+    const phase = (dt / PERIOD_MS) % 1;
+    const mid = (CFG.water.min + CFG.water.max)/2;
+    const amp = (CFG.water.max - CFG.water.min)/2;
+    const wl = mid - amp * Math.cos(phase * 2 * Math.PI);
+    $slider.value = wl;
+    updateWater(wl);
+  }
+  jiggleWater(now * 0.001);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ============ RESIZE ============ */
+function resize(){
+  const vp = document.getElementById('viewport');
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ============ INIT ============ */
+setWater(CFG.water.min);
+renderProfile();
+startPlay();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
