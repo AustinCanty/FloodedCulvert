@@ -10,7 +10,7 @@
   <style>
     :root {
       --bg: #0a0f17;
-      --bg-2: #0e1622;
+      --bg-2: #113F5D;
       --panel: #121b28;
       --panel-2: #172234;
       --border: #1c2738;
@@ -220,6 +220,19 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-head"><div class="card-title">Snapshot Scenarios</div><div class="card-tag">CLICK TO JUMP</div></div>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Embankment View</div><div class="card-tag">3D ONLY</div></div>
+        <div class="view-toggle">
+          <button class="view-btn active" id="view-xray">X-RAY</button>
+          <button class="view-btn" id="view-solid">SOLID</button>
+        </div>
+        <div class="view-hint">X-ray mode renders the road fill translucent so the culvert and the water level inside it are visible. Switch to solid for presentation screenshots.</div>
+      </div>
 
       <div class="card">
         <div class="card-head"><div class="card-title">Longitudinal Profile</div><div class="card-tag">W &nbsp;←→&nbsp; E</div></div>
